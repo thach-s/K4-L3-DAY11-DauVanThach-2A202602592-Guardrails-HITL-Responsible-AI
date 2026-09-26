@@ -62,14 +62,30 @@ class OpenAIRunner:
             return block_msg
 
         client = self._client()
-        completion = client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": agent.instruction},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=self.temperature,
-        )
+        messages = [
+            {"role": "system", "content": agent.instruction},
+            {"role": "user", "content": user_message},
+        ]
+        try:
+            completion = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.temperature,
+            )
+        except Exception as exc:
+            status_code = getattr(exc, "status_code", None)
+            free_route = f"{self.model}:free"
+            if (
+                self.provider != "openrouter"
+                or status_code != 404
+                or self.model.endswith(":free")
+            ):
+                raise
+            completion = client.chat.completions.create(
+                model=free_route,
+                messages=messages,
+                temperature=self.temperature,
+            )
         text = (completion.choices[0].message.content or "").strip()
 
         for hook in self.output_hooks:
